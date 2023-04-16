@@ -7,6 +7,72 @@ The default ORM for Tangerine
 ## Some parts of this document may not make full sense yet as I am working it out still
 
 
+### Buddha's Hand class structural ideas
+
+```python
+
+from typing import Any, Dict
+from aioredis import Redis, create_redis_pool
+
+class BuddhasHand:
+    def __init__(
+        self,
+        mongo_uri: str,
+        mongo_database: str,
+        redis_uri: str = None,
+        redis_password: str = None,
+        redis_db: int = 0,
+        redis_ttl: int = 3600,
+    ) -> None:
+        self.mongo_uri = mongo_uri
+        self.mongo_database = mongo_database
+
+        self.redis_uri = redis_uri
+        self.redis_password = redis_password
+        self.redis_db = redis_db
+        self.redis_ttl = redis_ttl
+
+        self.redis: Redis = None
+
+    async def connect(self) -> None:
+        # Connect to MongoDB
+        await Tortoise.init(
+            db_url=self.mongo_uri,
+            modules={"models": ["app.models"]},
+        )
+        await Tortoise.generate_schemas()
+
+        # Connect to Redis
+        if self.redis_uri:
+            self.redis = await create_redis_pool(
+                self.redis_uri, db=self.redis_db, password=self.redis_password
+            )
+
+    async def close(self) -> None:
+        # Close MongoDB connection
+        await Tortoise.close_connections()
+
+        # Close Redis connection
+        if self.redis:
+            self.redis.close()
+            await self.redis.wait_closed()
+
+    async def get_cached(self, key: str) -> Any:
+        if self.redis:
+            cached_data = await self.redis.get(key)
+            if cached_data:
+                return pickle.loads(cached_data)
+
+        return None
+
+    async def set_cached(self, key: str, value: Any) -> None:
+        if self.redis:
+            cached_data = pickle.dumps(value)
+            await self.redis.setex(key, self.redis_ttl, cached_data)
+
+
+```
+
 ```python
 from os import environ
 from tangerine import Tangerine, Keychain, Router, Ctx, TangerineError
