@@ -10,138 +10,125 @@ The default ORM for Tangerine
 ### Buddha's Hand class structural ideas
 
 ```python
-
-from typing import Any, Dict
-from aioredis import Redis, create_redis_pool
+import asyncio
+from typing import Dict, Union
+from tortoise import Tortoise
+from aioredis import create_redis_pool
 
 class BuddhasHand:
-    def __init__(
-        self,
-        mongo_uri: str,
-        mongo_database: str,
-        redis_uri: str = None,
-        redis_password: str = None,
-        redis_db: int = 0,
-        redis_ttl: int = 3600,
-    ) -> None:
-        self.mongo_uri = mongo_uri
-        self.mongo_database = mongo_database
+    def __init__(self, db_configs: Dict[str, Dict[str, Union[str, int]]]):
+        self.db_configs = db_configs
 
-        self.redis_uri = redis_uri
-        self.redis_password = redis_password
-        self.redis_db = redis_db
-        self.redis_ttl = redis_ttl
+    async def setup(self):
+        tasks = []
+        for db_name, db_config in self.db_configs.items():
+            db_type = db_config.get("type")
+            if db_type == "tortoise":
+                tasks.append(self.connect_tortoise(db_name, db_config))
+            elif db_type == "redis":
+                tasks.append(self.connect_redis(db_name, db_config))
+            else:
+                raise ValueError(f"Unsupported database type: {db_type}")
+        await asyncio.gather(*tasks)
 
-        self.redis: Redis = None
-
-    async def connect(self) -> None:
-        # Connect to MongoDB
+    async def connect_tortoise(self, db_name: str, db_config: Dict[str, Union[str, int]]):
         await Tortoise.init(
-            db_url=self.mongo_uri,
-            modules={"models": ["app.models"]},
+            db_url=db_config.get("conn_string"),
+            modules=db_config.get("modules", {}).get(db_name, []),
         )
-        await Tortoise.generate_schemas()
 
-        # Connect to Redis
-        if self.redis_uri:
-            self.redis = await create_redis_pool(
-                self.redis_uri, db=self.redis_db, password=self.redis_password
-            )
+    async def connect_redis(self, db_name: str, db_config: Dict[str, Union[str, int]]):
+        redis = await create_redis_pool(
+            db_config.get("conn_string"),
+            db=db_config.get("db", 0),
+        )
+        setattr(self, f"{db_name}_redis", redis)
 
-    async def close(self) -> None:
-        # Close MongoDB connection
+    async def shutdown(self):
+        tasks = []
+        for db_name, db_config in self.db_configs.items():
+            db_type = db_config.get("type")
+            if db_type == "tortoise":
+                tasks.append(self.disconnect_tortoise(db_name, db_config))
+            elif db_type == "redis":
+                tasks.append(self.disconnect_redis(db_name, db_config))
+            else:
+                raise ValueError(f"Unsupported database type: {db_type}")
+        await asyncio.gather(*tasks)
+
+    async def disconnect_tortoise(self, db_name: str, db_config: Dict[str, Union[str, int]]):
         await Tortoise.close_connections()
 
-        # Close Redis connection
-        if self.redis:
-            self.redis.close()
-            await self.redis.wait_closed()
-
-    async def get_cached(self, key: str) -> Any:
-        if self.redis:
-            cached_data = await self.redis.get(key)
-            if cached_data:
-                return pickle.loads(cached_data)
-
-        return None
-
-    async def set_cached(self, key: str, value: Any) -> None:
-        if self.redis:
-            cached_data = pickle.dumps(value)
-            await self.redis.setex(key, self.redis_ttl, cached_data)
-
-
+    async def disconnect_redis(self, db_name: str, db_config: Dict[str, Union[str, int]]):
+        redis = getattr(self, f"{db_name}_redis", None)
+        if redis:
+            redis.close()
+            await redis.wait_closed()
+            delattr(self, f"{db_name}_redis")
 ```
+
+
+
+
+### Example usage of Buddha's Hand
 
 ```python
 from os import environ
-from tangerine import Tangerine, Keychain, Router, Ctx, TangerineError
+from tangerine import Tangerine, Router, Ctx, TangerineError
 from key_limes import KeyLimes
 from buddhas_hand import BuddhasHand
-from tortoise import Tortoise, run_async
-from aioredis import create_redis_pool
 
-db = BuddhasHand(
-    host=environ.get("DB_HOST"),
-    conn_string=environ.get("DB_CONN_STRING")
-)
-
-# Set up Tortoise ORM with multiple databases
-TORTOISE_ORM = {
-    "connections": {
-        "default": environ.get("DB_CONN_STRING"),
-        "secondary": environ.get("SECONDARY_CONN_STRING"),
+# Create a dict of database configurations
+db_configs = {
+    "mongo": {
+        "conn_string": environ.get("MONGO_CONN_STRING"),
+        "redis_optimization": True,
+        "redis_host": environ.get("REDIS_HOST"),
+        "redis_port": environ.get("REDIS_PORT"),
+        "redis_db": 0
     },
-    "apps": {
-        "models": {
-            "models": ["app.models", "aerich.models"],
-            "default_connection": "default",
-        },
-        "secondary_models": {
-            "models": ["app.secondary_models"],
-            "default_connection": "secondary",
-        },
-    },
+    "postgres": {
+        "provider": "tortoise",
+        "conn_string": environ.get("POSTGRES_CONN_STRING")
+    }
 }
 
-async def init_db():
-    await Tortoise.init(config=TORTOISE_ORM)
-    await Tortoise.generate_schemas()
+# Initialize the BuddhasHand instance with the database configurations
+db = BuddhasHand(db_configs)
 
-# Set up a NoSQL engine, in this case Redis
-async def init_redis():
-    redis = await create_redis_pool(environ.get("REDIS_CONN_STRING"))
-    return redis
+# Initialize the Tangerine server
+tangerine = Tangerine()
 
-async def start():
-    await init_db()
-    redis = await init_redis()
-    app = Tangerine()
+# Initialize the KeyLimes keychain
+keychain = KeyLimes(
+    google_cloud=environ.get("GOOGLE_CLOUD_CREDENTIAL"),
+    secret_keys=[environ.get("SECRET_KEY_1"), environ.get("SECRET_KEY_2")],
+    db_host=environ.get("DB_HOST"),
+    db_conn_string=environ.get("DB_CONN_STRING")
+)
 
-    keychain = KeyLimes(
-        google_cloud=environ.get("GOOGLE_CLOUD_CREDENTIAL"),
-        secret_keys=[environ.get("SECRET_KEY_1"), environ.get("SECRET_KEY_2")],
-        db_host=environ.get("DB_HOST"),
-        db_conn_string=environ.get("DB_CONN_STRING")
-    )
+# Initialize the Yuzu authentication instance
+yuzu = Yuzu(
+    strategies={"providers": ["google", "facebook", "twitter", "github"], "local": True},
+    keychain=keychain
+)
 
-    # Use Tortoise ORM with the app instance
-    app.db = Tortoise.get_db_client("default")
-    app.secondary_db = Tortoise.get_db_client("secondary")
+# Set the auth instance of Tangerine to Yuzu
+tangerine.auth = yuzu
 
-    # Use the Redis instance with the app instance
-    app.redis = redis
+# Define some routes
+router = Router()
 
-    yuzu = Yuzu(
-        strategies={"providers": ["google", "facebook", "twitter"], "local": True},
-        keychain=keychain
-    )
+@router.get("/")
+async def index(ctx: Ctx):
+    return {"message": "Hello World!"}
 
-    app.auth = yuzu
-    app.start()
+# Mount the router to the Tangerine server
+tangerine.use(router)
 
-if __name__ == "__main__":
-    run_async(start())
+# Start the server
+tangerine.start()
+
 
 ```
 
@@ -179,6 +166,5 @@ class Query(ObjectType):
 schema = Schema(query=Query)
 
 ```
-
 
 ## More Details TBD
