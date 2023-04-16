@@ -4,6 +4,7 @@ The default ORM for Tangerine
 
 
 ## This is an idea sheet for how to implement buddhas hand from the user's perspective
+## Some parts of this document may not make full sense yet as I am working it out still
 
 
 ```python
