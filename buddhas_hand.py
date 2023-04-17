@@ -1,7 +1,9 @@
 import asyncio
 from typing import Dict, Union
+import sys
 
-import strawberry
+
+# import strawberry
 import graphql
 from tortoise import Tortoise
 import aioredis

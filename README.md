@@ -2,9 +2,8 @@
 The default database handler for Tangerine
 
 ## Commit message keys:
-```
-
-# anything provided after <relevant comment>: is optional but highly encouraged for tracing.
+``` python
+message = "Thanks for using proper commit messages!"
 
 # for updating any readmes or roadmaps
 📖 - <filepath/filename>: <relevant comment>:
