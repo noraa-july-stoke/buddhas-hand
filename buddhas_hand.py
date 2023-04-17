@@ -7,14 +7,6 @@ from tortoise import Tortoise
 import aioredis
 
 
-import asyncio
-from typing import Dict, Union
-
-import strawberry
-import graphql
-import aioredis
-
-
 class BuddhasHand:
     def __init__(self, db_configs: Dict[str, Dict[str, Union[str, int]]]):
         self.db_configs = db_configs
@@ -22,24 +14,25 @@ class BuddhasHand:
 
     async def setup(self):
         tasks = []
+        # goes through all the database config objects and connects them
         for db_name, db_config in self.db_configs.items():
-            db_type = db_config.get("type")
-            if db_type == "tortoise":
+            if db_config.get("type") == "tortoise":
                 tasks.append(self.connect_tortoise(db_name, db_config))
-            elif db_type == "redis":
+            elif db_config.get("type") == "redis":
                 tasks.append(self.connect_redis(db_name, db_config))
             else:
-                raise ValueError(f"Unsupported database type: {db_type}")
+                raise ValueError(f"Unsupported database type: {db_config.get('type')}")
         await asyncio.gather(*tasks)
         from .schema import schema
         self.app = graphql.GraphQL(schema)
 
     async def connect_tortoise(self, db_name: str, db_config: Dict[str, Union[str, int]]):
-        await Tortoise.init(
-            db_url=db_config["tortoise_db"].get("db_url"),
-            modules=db_config.get("modules", {}).get("models", []),
-        )
-
+            db_url = db_config.get("db_url")
+            modules = db_config.get("modules")
+            print(f"db_url: {db_url}")
+            print(f"modules: {modules}")
+            await Tortoise.init(db_url=db_url, modules=modules)
+            await Tortoise.generate_schemas()
 
     async def connect_redis(self, db_name: str, db_config: Dict[str, Union[str, int]]):
         redis = await aioredis.create_redis_pool(
@@ -71,27 +64,25 @@ class BuddhasHand:
             delattr(self, f"{db_name}_redis")
 
 
-import asyncio
+# db_configs = {
+#     "tortoise_db": {
+#         "type": "tortoise",
+#         "db_url": "sqlite://db.sqlite3",
+#         "modules": {
+#             "app": ["app.models"]
+#         }
+#     },
+#     "redis_db": {
+#         "type": "redis",
+#         "db_url": "redis://localhost:6379",
+#         "db": 0
+#     }
+# }
 
-db_configs = {
-    "tortoise_db": {
-        "type": "tortoise",
-        "db_url": "sqlite://db.sqlite3",
-        "modules": {
-            "models": ["app.models"]
-        }
-    },
-    "redis_db": {
-        "type": "redis",
-        "db_url": "redis://localhost:6379",
-        "db": 0
-    }
-}
+# async def test_buddhas_hand():
+#     bh = BuddhasHand(db_configs)
+#     await bh.setup()
+#     # perform some database operations here
+#     await bh.shutdown()
 
-async def test_buddhas_hand():
-    bh = BuddhasHand(db_configs)
-    await bh.setup()
-    # perform some database operations here
-    await bh.shutdown()
-
-asyncio.run(test_buddhas_hand())
+# asyncio.run(test_buddhas_hand())

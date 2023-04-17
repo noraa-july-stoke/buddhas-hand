@@ -1,5 +1,33 @@
 # buddhas-hand
-The default ORM for Tangerine
+The default database handler for Tangerine
+
+## Commit message keys:
+```
+
+# anything provided after <relevant comment>: is optional but highly encouraged for tracing.
+
+# for updating any readmes or roadmaps
+📖 - <filepath/filename>: <relevant comment>:
+
+# for new features
+🚀  - <filepath/filename>: <relevant comment>:
+
+# for debug commits.
+🪳👟 - <filepath/filename>: <relevant comment>:
+
+# for refactoring
+🧠 - <filepath/filename>: <relevant comment>:
+
+# for documentation
+🪷 - <filepath/filename>: <relevant comment>:
+
+# branch initialization commit
+🌱 - <filepath/filename>: <relevant comment>
+
+# standard merge message
+🔀 - <branch name>: <feature filepath>: <relevant comment>
+
+```
 
 
 

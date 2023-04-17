@@ -1,1 +1,3 @@
-from buddhas_hand import BuddhasHand
+# from __app__ import BuddhasHand
+
+# print(BuddhasHand)
