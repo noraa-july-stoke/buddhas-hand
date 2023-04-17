@@ -3,7 +3,7 @@ The default ORM for Tangerine
 
 
 
-## This is an idea sheet for how to implement buddhas hand from the user's perspective
+## This is an idea sheet for how to implement buddhas hand
 ## Some parts of this document may not make full sense yet as I am working it out still
 
 
@@ -12,12 +12,16 @@ The default ORM for Tangerine
 ```python
 import asyncio
 from typing import Dict, Union
+
+from strawberry.asgi import GraphQL
 from tortoise import Tortoise
 from aioredis import create_redis_pool
+
 
 class BuddhasHand:
     def __init__(self, db_configs: Dict[str, Dict[str, Union[str, int]]]):
         self.db_configs = db_configs
+        self.app = None
 
     async def setup(self):
         tasks = []
@@ -30,6 +34,8 @@ class BuddhasHand:
             else:
                 raise ValueError(f"Unsupported database type: {db_type}")
         await asyncio.gather(*tasks)
+        from .schema import schema
+        self.app = GraphQL(schema)
 
     async def connect_tortoise(self, db_name: str, db_config: Dict[str, Union[str, int]]):
         await Tortoise.init(
@@ -79,10 +85,11 @@ from key_limes import KeyLimes
 from buddhas_hand import BuddhasHand
 
 # Create a dict of database configurations
+# there is an optional redis caching option for performance
 db_configs = {
     "mongo": {
         "conn_string": environ.get("MONGO_CONN_STRING"),
-        "redis_optimization": True,
+        "redis_cache": True,
         "redis_host": environ.get("REDIS_HOST"),
         "redis_port": environ.get("REDIS_PORT"),
         "redis_db": 0
