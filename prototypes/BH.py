@@ -46,10 +46,10 @@ class Database:
 
 
 class BaseModel:
-    table_name = None
-    schema_name = None
 
-    def __init__(self, id: Optional[int] = None):
+    def __init__(self, schema_name: str, table_name: str, id: Optional[int] = None):
+        self.schema_name = schema_name
+        self.table_name = table_name
         self.id = id
 
     def insert(self, cur, conn):
@@ -114,8 +114,6 @@ class BaseModel:
 
 
 class User(BaseModel):
-    table_name = 'users'
-    schema_name = 'buddhas_hand'
 
     def __init__(self, name: str, email: str, id: Optional[int] = None):
         super().__init__(id=id)

@@ -1,90 +1,129 @@
-import asyncio
-from typing import Dict, Union
-import sys
+from typing import List, Optional
+import psycopg2
+import psycopg2.extensions
 
 
-# import strawberry
-import graphql
-from tortoise import Tortoise
-import aioredis
+class Database:
+    def __init__(self, connection_string: str):
+        self.connection_string: str = connection_string
+
+    def create_schema(self, schema_name: str) -> None:
+        with psycopg2.connect(self.connection_string) as conn:
+            with conn.cursor() as cur:
+                cur.execute(f"CREATE SCHEMA IF NOT EXISTS {schema_name};")
+                conn.commit()
+
+    def create_table(self, table: 'Table') -> None:
+        with psycopg2.connect(self.connection_string) as conn:
+            with conn.cursor() as cur:
+
+                columns_str = ", ".join(f"{col.name} {col.data_type}" for col in table.columns)
+
+                cur.execute(f"""
+                    CREATE TABLE IF NOT EXISTS {table.schema_name}.{table.name} (
+                        id SERIAL PRIMARY KEY,
+                        {columns_str}
+                    );
+                """)
+                conn.commit()
 
 
-class BuddhasHand:
-    def __init__(self, db_configs: Dict[str, Dict[str, Union[str, int]]]):
-        self.db_configs = db_configs
-        self.app = None
+    def drop_schema(self, schema_name: str) -> None:
+        with psycopg2.connect(self.connection_string) as conn:
+            with conn.cursor() as cur:
+                cur.execute(f"DROP SCHEMA IF EXISTS {schema_name} CASCADE;")
+                conn.commit()
 
-    async def setup(self):
-        tasks = []
-        # goes through all the database config objects and connects them
-        for db_name, db_config in self.db_configs.items():
-            if db_config.get("type") == "tortoise":
-                tasks.append(self.connect_tortoise(db_name, db_config))
-            elif db_config.get("type") == "redis":
-                tasks.append(self.connect_redis(db_name, db_config))
-            else:
-                raise ValueError(f"Unsupported database type: {db_config.get('type')}")
-        await asyncio.gather(*tasks)
-        from .schema import schema
-        self.app = graphql.GraphQL(schema)
-
-    async def connect_tortoise(self, db_name: str, db_config: Dict[str, Union[str, int]]):
-            db_url = db_config.get("db_url")
-            modules = db_config.get("modules")
-            print(f"db_url: {db_url}")
-            print(f"modules: {modules}")
-            await Tortoise.init(db_url=db_url, modules=modules)
-            await Tortoise.generate_schemas()
-
-    async def connect_redis(self, db_name: str, db_config: Dict[str, Union[str, int]]):
-        redis = await aioredis.create_redis_pool(
-            db_config.get("db_url"),
-            db=db_config.get("db", 0),
-        )
-        setattr(self, f"{db_name}_redis", redis)
-
-    async def shutdown(self):
-        tasks = []
-        for db_name, db_config in self.db_configs.items():
-            db_type = db_config.get("type")
-            if db_type == "tortoise":
-                tasks.append(self.disconnect_tortoise(db_name, db_config))
-            elif db_type == "redis":
-                tasks.append(self.disconnect_redis(db_name, db_config))
-            else:
-                raise ValueError(f"Unsupported database type: {db_type}")
-        await asyncio.gather(*tasks)
-
-    async def disconnect_tortoise(self, db_name: str, db_config: Dict[str, Union[str, int]]):
-        await Tortoise.close_connections()
-
-    async def disconnect_redis(self, db_name: str, db_config: Dict[str, Union[str, int]]):
-        redis = getattr(self, f"{db_name}_redis", None)
-        if redis:
-            redis.close()
-            await redis.wait_closed()
-            delattr(self, f"{db_name}_redis")
+    def drop_table(self, table_name: str, schema_name: str) -> None:
+        with psycopg2.connect(self.connection_string) as conn:
+            with conn.cursor() as cur:
+                cur.execute(f"DROP TABLE IF EXISTS {schema_name}.{table_name};")
+                conn.commit()
 
 
-# db_configs = {
-#     "tortoise_db": {
-#         "type": "tortoise",
-#         "db_url": "sqlite://db.sqlite3",
-#         "modules": {
-#             "app": ["app.models"]
-#         }
-#     },
-#     "redis_db": {
-#         "type": "redis",
-#         "db_url": "redis://localhost:6379",
-#         "db": 0
-#     }
-# }
+class Column:
+    def __init__(self, name: str, data_type: str):
+        self.name = name
+        self.data_type = data_type
 
-# async def test_buddhas_hand():
-#     bh = BuddhasHand(db_configs)
-#     await bh.setup()
-#     # perform some database operations here
-#     await bh.shutdown()
 
-# asyncio.run(test_buddhas_hand())
+class Table:
+    def __init__(self, name: str, schema_name: str, columns: List[Column]):
+        self.name = name
+        self.schema_name = schema_name
+        self.columns = columns
+
+
+class BaseModel:
+    table_name = None
+    schema_name = None
+
+    def __init__(self, id: Optional[int] = None):
+        self.id = id
+
+    def delete(self, cur, conn):
+        query = f"DELETE FROM {self.schema_name}.{self.table_name} WHERE id = %s;"
+        cur.execute(query, (self.id,))
+        conn.commit()
+
+
+class User(BaseModel):
+    table_name = 'users'
+    schema_name = 'buddhas_hand'
+
+    def __init__(self, name: str, email: str, id: Optional[int] = None):
+        super().__init__(id=id)
+        self.name = name
+        self.email = email
+
+    def insert(self, cur, conn):
+        query = f'''
+            INSERT INTO {self.schema_name}.{self.table_name} (name, email)
+            VALUES (%s, %s)
+            RETURNING id;
+        '''
+        cur.execute(query, (self.name, self.email))
+        result = cur.fetchone()
+        self.id = result[0]  # change this line
+        conn.commit()
+
+    def update(self, cur, conn):
+        query = f'''
+            UPDATE {self.schema_name}.{self.table_name}
+            SET name = %s, email = %s
+            WHERE id = %s;
+        '''
+        cur.execute(query, (self.name, self.email, self.id))
+        conn.commit()
+
+    @classmethod
+    def find_all(cls, cur, **kwargs):
+        # Build the WHERE clause dynamically based on the kwargs
+        # and their corresponding column names
+        where_clause = " AND ".join(f"{k} = %s" for k in kwargs.keys())
+        values = tuple(kwargs.values())
+
+        query = f"SELECT * FROM {cls.schema_name}.{cls.table_name} WHERE {where_clause};"
+        cur.execute(query, values)
+        results = cur.fetchall()
+        return [cls(**row) for row in results]
+
+    @classmethod
+    def get_by_id(cls, cur, id):
+        query = f"SELECT * FROM {cls.schema_name}.{cls.table_name} WHERE id = %s;"
+        cur.execute(query, (id,))
+        result = cur.fetchone()
+        if result:
+            result_dict = {
+                'id': result[0],
+                'name': result[1],
+                'email': result[2]
+            }
+            return cls(**result_dict)
+        return None
+
+    def save(self, cur, conn):
+        if self.id:
+            self.update(cur, conn)
+        else:
+            self.insert(cur, conn)
