@@ -2,6 +2,6 @@
 import os
 import sys
 
-from buddhas_hand import BuddhasHand
+from prototypes.buddhas_hand import BuddhasHand
 
 print(BuddhasHand)

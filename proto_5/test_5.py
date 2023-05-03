@@ -1,42 +1,3 @@
-# buddhas-hand
-The default database handler for Tangerine
-
-## Commit message keys:
-``` python
-message = "Thanks for using proper commit messages!"
-
-# for updating any readmes or roadmaps
-📖 - <filepath/filename>: <relevant comment>:
-
-# for new features
-🚀  - <filepath/filename>: <relevant comment>:
-
-# for debug commits.
-🪳👟 - <filepath/filename>: <relevant comment>:
-
-# for refactoring
-🧠 - <filepath/filename>: <relevant comment>:
-
-# for documentation
-🪷 - <filepath/filename>: <relevant comment>:
-
-# branch initialization commit
-🌱 - <filepath/filename>: <relevant comment>
-
-# standard merge message
-🔀 - <branch name>: <feature filepath>: <relevant comment>
-
-```
-
-
-
-## This is an idea sheet for how to implement buddhas hand
-## Some parts of this document may not make full sense yet as I am working it out still
-
-
-### So far, this is what you can do with Buddha's Hand:
-```python
-
 import psycopg2
 from buddhas_hand_5 import Database, Table
 from user_model import User
@@ -123,8 +84,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-```
-
-## More Details TBD
