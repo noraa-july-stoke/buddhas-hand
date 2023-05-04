@@ -16,18 +16,20 @@ class Database:
     def __init__(self, connection_string: str):
         self.connection_string: str = connection_string
 
-    def execute(self, query: str) -> Union[List[Dict[str, Any]], None]:
+    def execute(self, query, params=None):
         with psycopg2.connect(self.connection_string) as conn:
-            print(query)
             with conn.cursor() as cur:
-                cur.execute(query)
-                if query.strip().upper().startswith("SELECT"):
-                    column_names = [desc[0] for desc in cur.description]
-                    results = [dict(zip(column_names, row)) for row in cur.fetchall()]
+                if params is not None:
+                    cur.execute(query, params)
                 else:
-                    conn.commit()
-                    results = None
-                return results
+                    cur.execute(query)
+                try:
+                    result = cur.fetchall()
+                    return result
+                except psycopg2.ProgrammingError:
+                    return None
+
+
 
     def create_schema(self, schema_name: str) -> None:
         """
@@ -199,6 +201,22 @@ class BaseModel:
                 include_tables.append(assoc_table)
         return include_tables, join_conditions
 
+    @classmethod
+    def from_row(cls, row: Tuple) -> 'BaseModel':
+        """
+        Create a new instance of the class from a row tuple.
+
+        Args:
+            row (Tuple): A tuple representing a row from the database table.
+
+        Returns:
+            BaseModel: A new instance of the class.
+        """
+        column_names = [column.name for column in cls.columns]
+        row_dict = dict(zip(column_names, row))
+        return cls(**row_dict)
+
+
 
 
 
@@ -243,23 +261,75 @@ class BaseModel:
             cur.execute(query, {'id': self.id})
 
     @classmethod
-    def find_all(cls, include: Optional[List[Type['BaseModel']]] = None, many_to_many: Optional[Dict[str, Type['BaseModel']]] = None) -> List['BaseModel']:
-        if include:
-            include_tables, join_conditions = cls.associate(include, many_to_many)
-        else:
-            include_tables = []
-            join_conditions = ""
+    def one_to_many(cls, related_class):
+        cls.relations[related_class.__name__] = {
+            "relation_type": "one_to_many",
+            "related_class": related_class,
+        }
+        related_class.relations[cls.__name__] = {
+            "relation_type": "many_to_one",
+            "related_class": cls,
+        }
 
-        if include_tables and join_conditions:
-            query = f"SELECT * FROM {cls.schema_name}.{cls.table_name}"
-            for idx, table in enumerate(include_tables):
-                query += f" JOIN {cls.schema_name}.{table.table_name} ON {join_conditions[idx]}"
-        else:
-            query = f"SELECT * FROM {cls.schema_name}.{cls.table_name}"
+    @classmethod
+    def many_to_many(cls, related_class, assoc_table, foreign_key, reference_key):
+        cls.relations[related_class.__name__] = {
+            "relation_type": "many_to_many",
+            "related_class": related_class,
+            "assoc_table": assoc_table,
+            "foreign_key": foreign_key,
+            "reference_key": reference_key,
+        }
 
-        results = cls.db.execute(query)
-        return [cls(**result) for result in results]
+    # @classmethod
+    # def find_all(cls, include: Optional[List[Type['BaseModel']]] = None, many_to_many: Optional[Dict[str, Type['BaseModel']]] = None) -> List['BaseModel']:
+    #     if include:
+    #         include_tables, join_conditions = cls.associate(include, many_to_many)
+    #     else:
+    #         include_tables = []
+    #         join_conditions = ""
 
+    #     if include_tables and join_conditions:
+    #         query = f"SELECT * FROM {cls.schema_name}.{cls.table_name}"
+    #         for idx, table in enumerate(include_tables):
+    #             query += f" JOIN {cls.schema_name}.{table.table_name} ON {join_conditions[idx]}"
+    #     else:
+    #         query = f"SELECT * FROM {cls.schema_name}.{cls.table_name}"
+
+    #     results = cls.db.execute(query)
+    #     return [cls(**result) for result in results]
+
+    @classmethod
+    def find_all(cls, many_to_many=None):
+        if many_to_many is None:
+            many_to_many = {}
+
+        query = f"SELECT * FROM {cls.schema_name}.{cls.table_name}"
+        rows = cls.db.execute(query)
+
+        instances = []
+        for row in rows:
+            instance = cls.from_row(row)
+            instances.append(instance)
+
+            # Load related many-to-many relationships
+            for relation_name, relation_class in many_to_many.items():
+                setattr(instance, relation_name.lower() + "s", [])
+                query = f"""
+                    SELECT {relation_class.schema_name}.{relation_class.table_name}.*
+                    FROM {relation_class.schema_name}.{relation_class.table_name}
+                    JOIN {cls.schema_name}.{relation_class.assoc_table.table_name}
+                    ON {relation_class.schema_name}.{relation_class.table_name}.{relation_class.primary_key}
+                    = {cls.schema_name}.{relation_class.assoc_table.table_name}.{relation_class.foreign_key}
+                    WHERE {cls.schema_name}.{relation_class.assoc_table.table_name}.{relation_class.reference_key} = %s;
+                """
+                related_rows = cls.db.execute(query, (getattr(instance, cls.primary_key),))
+
+                for related_row in related_rows:
+                    related_instance = relation_class.from_row(related_row)
+                    getattr(instance, relation_name.lower() + "s").append(related_instance)
+
+        return instances
 
 
 

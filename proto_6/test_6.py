@@ -6,17 +6,24 @@ from user_role import UserRole
 
 
 
+import psycopg2
+from buddhas_hand_6 import Database, Table, BaseModel, ForeignKey
+from user import User
+from role import Role
+from user_role import UserRole
+
 def test_many_to_many():
     db = Database("postgresql://postgres:C4melz!!@localhost:5432/local_development")
     User.set_database(db)
     Role.set_database(db)
     UserRole.set_database(db)
 
+    # Establish many-to-many relationship
+    User.many_to_many(Role, UserRole, "user_id", "role_id")
+    Role.many_to_many(User, UserRole, "role_id", "user_id")
+
     # Create schema and tables
     db.create_schema("buddhas_hand")
-    User.register_columns()
-    Role.register_columns()
-    UserRole.register_columns()
     db.create_table(Table.from_model(User))
     db.create_table(Table.from_model(Role))
     db.create_table(Table.from_model(UserRole))
@@ -40,7 +47,7 @@ def test_many_to_many():
     user_role3.insert()
 
     # Retrieve users with roles
-    users = User.find_all(include=[Role], many_to_many={"user_roles": UserRole})
+    users = User.find_all(many_to_many={"Role": Role})
     for user in users:
         print(user.username, user.email, user)
         roles = [role for role in user.roles]
