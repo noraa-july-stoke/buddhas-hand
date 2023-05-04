@@ -1,4 +1,3 @@
-# test.py
 import psycopg2
 from buddhas_hand_5 import Database, Table
 from user_model import User
