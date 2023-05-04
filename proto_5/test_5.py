@@ -12,7 +12,6 @@ def main():
 
     User.set_database(db)
     Pet.set_database(db)
-
     # Create schema
 
     # Create the users and pets tables
@@ -33,10 +32,11 @@ def main():
     pet1.insert()
     pet2.insert()
 
-    pets = Pet.find_all()
+    pets = Pet.find_all(include=[User])
     print("Inserted pets:")
     for pet in pets:
-        print(pet.__dict__)
+        user = User.get_by_id(pet.owner_id)
+        print(f"{pet.name} belongs to {user.name}")
 
     # Update pet details
     pet1.name = "Buddy Updated"
@@ -44,10 +44,11 @@ def main():
     pet1.update()
     pet2.update()
 
-    pets = Pet.find_all()
+    pets = Pet.find_all(include=[User])
     print("Updated pets:")
     for pet in pets:
-        print(pet.__dict__)
+        user = User.get_by_id(pet.owner_id)
+        print(f"{pet.name} belongs to {user.name}")
 
     # Delete pets
     pet1.delete()
@@ -57,6 +58,7 @@ def main():
     db.drop_table(pets_table.name, pets_table.schema_name)
     db.drop_table(users_table.name, users_table.schema_name)
     db.drop_schema("buddhas_hand")
+
 
 if __name__ == "__main__":
     main()

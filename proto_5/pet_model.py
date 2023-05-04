@@ -6,16 +6,18 @@ from validations import is_string
 class Pet(BaseModel):
     table_name: str = 'pets'
     schema_name: str = 'buddhas_hand'
+    relations = {
+        "User": {
+            'foreign_key': 'owner_id',
+            'reference_key': 'id'
+        }
+    }
 
-    def __init__(self, name: str, species: str, owner_id: int, id: Optional[int] = None, **kwargs):
-        super().__init__(id=id, name=name, species=species, owner_id=owner_id, **kwargs)
+    def __init__(self, name: str, species: str, owner_id: int, **kwargs):
+        super().__init__(name=name, species=species, owner_id=owner_id, **kwargs)
 
 
 Pet.register_columns([
-    {
-        "name": "id",
-        "type": "SERIAL PRIMARY KEY"
-    },
     {
         "name": "name",
         "type": "TEXT",

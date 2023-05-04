@@ -8,14 +8,12 @@ class User(BaseModel):
     table_name: str = 'users'
     schema_name: str = 'buddhas_hand'
 
-    def __init__(self, name: str, email: str, age: int, id: Optional[int] = id, **kwargs):
-        super().__init__(id=id, name=name, email=email, age=age, **kwargs)
+    def __init__(self, name: str, email: str, age: int, **kwargs):
+        super().__init__(name=name, email=email, age=age, **kwargs)
+
 
 User.register_columns([
-    {
-        "name": "id",
-        "type": "SERIAL PRIMARY KEY"
-    },
+
     {
         "name": "name",
         "type": "TEXT",
