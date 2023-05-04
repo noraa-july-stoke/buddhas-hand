@@ -1,84 +1,60 @@
+# test.py
 import psycopg2
 from buddhas_hand_5 import Database, Table
 from user_model import User
-
-def is_not_email(value):
-    if "@" in value:
-        raise ValueError("Value must not be an email address")
-
-def name_length_check(value):
-    if len(value) < 3:
-        raise ValueError("Name must be at least 3 characters long")
-
-def is_string(value):
-    if not isinstance(value, str):
-        raise ValueError("Value must be a string")
-
+from pet_model import Pet
 
 def main():
     # Set up the database connection
     connection_string = "postgresql://postgres:C4melz!!@localhost:5432/local_development"
     db = Database(connection_string)
-    User.set_database(db)
-
-    # Create schema and register columns for the User model
     db.create_schema("buddhas_hand")
 
+    User.set_database(db)
+    Pet.set_database(db)
 
-    User.register_columns([
-        {
-            "name": "name",
-            "type": "TEXT",
-            "validations": [is_not_email, name_length_check, is_string],
-            "nullable": False,
-        },
-        {
-            "name": "email",
-            "type": "TEXT",
-            "validations": [],
-            "nullable": False,
-        },
-        {
-            "name": "age",
-            "type": "INTEGER",
-            "validations": [],
-            "nullable": False,
-        },
-    ])
+    # Create schema
+
+    # Create the users and pets tables
     users_table = Table.from_model(User)
+    pets_table = Table.from_model(Pet)
     db.create_table(users_table)
+    db.create_table(pets_table)
 
-
-    # Create the users table
-
-
+    # Create and insert users
     user1 = User(name="John Doe", email="john@example.com", age=30)
     user2 = User(name="Jane Smith", email="jane@example.com", age=28)
-
     user1.insert()
     user2.insert()
 
-    users = User.find_all()
-    print("Inserted users:")
-    for user in users:
-        print(user.__dict__)
+    # Create and insert pets
+    pet1 = Pet(name="Buddy", species="Dog", owner_id=user1.id)
+    pet2 = Pet(name="Mittens", species="Cat", owner_id=user2.id)
+    pet1.insert()
+    pet2.insert()
 
-    user1.name = "John Updated"
-    user1.age = 31
-    user2.name = "Jane Updated"
-    user2.age = 29
+    pets = Pet.find_all()
+    print("Inserted pets:")
+    for pet in pets:
+        print(pet.__dict__)
 
-    user1.update()
-    user2.update()
+    # Update pet details
+    pet1.name = "Buddy Updated"
+    pet2.name = "Mittens Updated"
+    pet1.update()
+    pet2.update()
 
-    users = User.find_all()
-    print("Updated users:")
-    for user in users:
-        print(user.__dict__)
+    pets = Pet.find_all()
+    print("Updated pets:")
+    for pet in pets:
+        print(pet.__dict__)
 
-    user1.delete()
-    user2.delete()
+    # Delete pets
+    pet1.delete()
+    pet2.delete()
 
+    # Drop tables and schema
+    db.drop_table(pets_table.name, pets_table.schema_name)
     db.drop_table(users_table.name, users_table.schema_name)
     db.drop_schema("buddhas_hand")
 
